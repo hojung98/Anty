@@ -7,7 +7,8 @@ from PySide6.QtCore import QThread, Signal
 
 
 class ChatFetcherThread(QThread):
-    chat_fetched = Signal(list, str)
+    chat_fetched = Signal(list, str)  # 기존 전체 전송용
+    chat_progress = Signal(str)       # 🔥 실시간 채팅 전송용 추가
 
     def __init__(self, video_id, target_nickname):
         super().__init__()
@@ -70,6 +71,7 @@ class ChatFetcherThread(QThread):
                     filtered_chats.append(formatted_chat)
                     self.seen_messages.add(message_time)
                     print(f"💬 [채팅] {formatted_chat}")
+                    self.chat_progress.emit(formatted_chat)   # ✅ 실시간 전송
 
             current_time = video_chats[-1]["playerMessageTime"] + 1
 
@@ -141,7 +143,12 @@ class ChatFetcherApp(QWidget):
 
         self.thread = ChatFetcherThread(video_id, nickname)
         self.thread.chat_fetched.connect(self.display_chats)
+        self.thread.chat_progress.connect(self.append_chat)  # ✅ 실시간 업데이트 연결
+
         self.thread.start()
+
+    def append_chat(self, chat_line):
+        self.chat_display.append(chat_line)   # ✅ 실시간으로 한 줄씩 추가
 
     def display_chats(self, chats, error_message):
         self.fetch_button.setEnabled(True)
