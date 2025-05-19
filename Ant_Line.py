@@ -4,10 +4,12 @@ import sys
 import re
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QFileDialog, QScrollArea, QCheckBox, QMessageBox, QHBoxLayout
 from PySide6.QtCore import QThread, Signal
+from functools import partial
 
 class ChatFetcherThread(QThread):
-    chat_fetched = Signal(list, str)  # 기존 전체 전송용
+    chat_fetched = Signal(list, str, object)  # video_id 추가됨
     chat_progress = Signal(str)       # 🔥 실시간 채팅 전송용 추가
+    
 
     def __init__(self, video_id, nickname_filter, message_filter):
         super().__init__()
@@ -15,6 +17,8 @@ class ChatFetcherThread(QThread):
         self.seen_messages = set()
         self.nickname_filter = nickname_filter
         self.message_filter = message_filter
+        self.thread_queue = []
+        self.current_thread_index = 0
 
     def run(self):
         API_URL = f"https://api.chzzk.naver.com/service/v1/videos/{self.video_id}/chats"
@@ -37,7 +41,7 @@ class ChatFetcherThread(QThread):
 
             if response.status_code != 200:
                 print(f"❌ [에러] HTTP 상태 코드: {response.status_code}")
-                self.chat_fetched.emit([], f"🚨 요청 실패! HTTP 상태 코드: {response.status_code}")
+                self.chat_fetched.emit([], f"🚨 요청 실패! HTTP 상태 코드: {response.status_code}", self.video_id)
                 return
 
             chat_data = response.json()
@@ -79,7 +83,7 @@ class ChatFetcherThread(QThread):
             current_time = video_chats[-1]["playerMessageTime"] + 1
 
         print(f"📦 [결과] 총 수집된 채팅 수: {len(filtered_chats)}")
-        self.chat_fetched.emit(filtered_chats, None)
+        self.chat_fetched.emit(filtered_chats, None, self.video_id)  # ✅ 수정
 
 
 
@@ -160,15 +164,12 @@ class ChatFetcherApp(QWidget):
 
         self.setLayout(layout)
 
+
     def start_fetching(self):
         selected_videos = [cb for cb in self.vod_checkboxes if cb.isChecked()]
         if not selected_videos:
             self.chat_display.setText("❌ 채팅을 가져올 VOD를 선택해주세요!")
             return
-
-        # ⚠️ 여러 개 선택되었더라도 일단 첫 번째 것만 사용 (멀티 처리할 거면 여기 반복문으로 바꾸면 됨)
-        selected_checkbox = selected_videos[0]
-        video_id = selected_checkbox.video_id
 
         nickname = self.nickname_input.text().strip()
         message = self.message_input.text().strip()
@@ -177,13 +178,64 @@ class ChatFetcherApp(QWidget):
             self.chat_display.setText("❌ 닉네임 또는 채팅 내용을 하나 이상 입력해야 해요!")
             return
 
-        self.chat_display.setText(f"🔍 영상 ID: {video_id} / 닉네임: '{nickname}'의 채팅 검색 중...\n")
+        self.chat_display.setText("🔍 선택한 영상들의 채팅을 순차적으로 가져오는 중...\n")
         self.fetch_button.setEnabled(False)
 
-        self.thread = ChatFetcherThread(video_id, nickname, message)
-        self.thread.chat_fetched.connect(self.display_chats)
-        self.thread.chat_progress.connect(self.append_chat)  # ✅ 실시간 업데이트 연결
-        self.thread.start()
+        self.filtered_chats = []
+        self.thread_queue = [
+            (cb.video_id, nickname, message)
+            for cb in selected_videos
+        ]
+        self.current_thread_index = 0
+
+        self.start_next_thread()
+
+
+    def start_next_thread(self):
+        if self.current_thread_index >= len(self.thread_queue):
+            self.fetch_button.setEnabled(True)
+            self.chat_display.append("✅ 모든 영상의 채팅 수집이 완료되었습니다!\n")
+            return
+
+        video_id, nickname, message = self.thread_queue[self.current_thread_index]
+        thread = ChatFetcherThread(video_id, nickname, message)
+        thread.chat_fetched.connect(self.handle_thread_finished)
+        thread.chat_progress.connect(self.append_chat)
+
+        self.current_thread = thread
+        thread.start()
+
+
+    def display_chats_per_video(self, chats, error_message, video_id):
+        self.fetch_button.setEnabled(True)
+
+        if error_message:
+            self.chat_display.append(f"<b>🚨 [{video_id}] 오류:</b> {error_message}<br>")
+            return
+
+        if chats:
+            count = len(chats)
+            html_text = f"<b>✅ [영상 {video_id}] 채팅 내역 ({count}개)</b><br>" + "<br>".join(chats) + "<br><br>"
+            self.chat_display.append(html_text)
+            self.filtered_chats.extend(chats)
+        else:
+            self.chat_display.append(f"<b>🚨 [영상 {video_id}] 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ</b><br><br>")
+
+
+    def handle_thread_finished(self, chats, error_message, video_id):
+        if error_message:
+            self.chat_display.append(f"<b>🚨 [{video_id}] 오류:</b> {error_message}<br>")
+        elif chats:
+            count = len(chats)
+            html_text = f"<b>✅ [영상 {video_id}] 채팅 내역 ({count}개)</b><br>" + "<br>".join(chats) + "<br><br>"
+            self.chat_display.append(html_text)
+            self.filtered_chats.extend(chats)
+        else:
+            self.chat_display.append(f"<b>🚨 [영상 {video_id}] 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ</b><br><br>")
+
+        self.current_thread_index += 1
+        self.start_next_thread()
+
 
 
     def append_chat(self, chat_line):
