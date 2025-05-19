@@ -7,7 +7,8 @@ from PySide6.QtCore import QThread, Signal
 
 
 class ChatFetcherThread(QThread):
-    chat_fetched = Signal(list, str)
+    chat_fetched = Signal(list, str)  # 기존 전체 전송용
+    chat_progress = Signal(str)       # 🔥 실시간 채팅 전송용 추가
 
     def __init__(self, video_id, target_nickname):
         super().__init__()
@@ -24,46 +25,60 @@ class ChatFetcherThread(QThread):
             "Referer": f"https://chzzk.naver.com/video/{self.video_id}"
         }
 
-        START_TIME = 0
-        END_TIME = 400000
-        STEP = 40000
-
+        current_time = 0
         filtered_chats = []
 
-        for playerMessageTime in range(START_TIME, END_TIME, STEP):
-            params = {"playerMessageTime": str(playerMessageTime)}
+        print("🚀 [시작] 채팅 수집 시작됨")
+
+        while True:
+            print(f"📡 [요청] playerMessageTime={current_time}")
+            params = {"playerMessageTime": str(current_time)}
             response = requests.get(API_URL, headers=headers, params=params)
 
-            if response.status_code == 200:
-                chat_data = response.json()
-                video_chats = chat_data.get("content", {}).get("videoChats", [])
-
-                if not video_chats:
-                    continue
-
-                for chat in video_chats:
-                    profile_str = chat.get("profile")
-                    message_time = chat.get("playerMessageTime", 0)
-
-                    if profile_str:
-                        profile_data = json.loads(profile_str)
-                        chat_nickname = profile_data.get("nickname", "Unknown")
-                    else:
-                        chat_nickname = "Unknown"
-
-                    message = chat.get("content", "")
-
-                    if chat_nickname == self.target_nickname:
-                        if message_time not in self.seen_messages:
-                            formatted_chat = f'{self.format_time(message_time)} - {chat_nickname}: {message}'
-                            filtered_chats.append(formatted_chat)
-                            self.seen_messages.add(message_time)
-
-            else:
+            if response.status_code != 200:
+                print(f"❌ [에러] HTTP 상태 코드: {response.status_code}")
                 self.chat_fetched.emit([], f"🚨 요청 실패! HTTP 상태 코드: {response.status_code}")
                 return
 
+            chat_data = response.json()
+            video_chats = chat_data.get("content", {}).get("videoChats", [])
+            print(f"📥 [응답] 채팅 수: {len(video_chats)}")
+
+            if not video_chats:
+                print("✅ [완료] 더 이상 가져올 채팅이 없습니다. 수집 종료.")
+                break
+
+            for chat in video_chats:
+                profile_str = chat.get("profile")
+                message_time = chat.get("playerMessageTime", 0)
+
+                profile_data = {}
+                if profile_str:
+                    try:
+                        loaded = json.loads(profile_str)
+                        if isinstance(loaded, dict):  # ✅ 이게 중요
+                            profile_data = loaded
+                        else:
+                            print(f"⚠️ [무시됨] profile_str가 dict가 아님: {profile_str}")
+                    except json.JSONDecodeError:
+                        print(f"⚠️ [파싱 실패] profile_str: {profile_str}")
+
+                chat_nickname = profile_data.get("nickname", "Unknown")
+                message = chat.get("content", "")
+
+                if chat_nickname == self.target_nickname and message_time not in self.seen_messages:
+                    formatted_chat = f'{self.format_time(message_time)} - {chat_nickname}: {message}'
+                    filtered_chats.append(formatted_chat)
+                    self.seen_messages.add(message_time)
+                    print(f"💬 [채팅] {formatted_chat}")
+                    self.chat_progress.emit(formatted_chat)   # ✅ 실시간 전송
+
+            current_time = video_chats[-1]["playerMessageTime"] + 1
+
+        print(f"📦 [결과] 총 수집된 채팅 수: {len(filtered_chats)}")
         self.chat_fetched.emit(filtered_chats, None)
+
+
 
     def format_time(self, milliseconds):
         """밀리초를 hh:mm:ss 형식으로 변환하고 링크로 감싸 반환"""
@@ -128,7 +143,12 @@ class ChatFetcherApp(QWidget):
 
         self.thread = ChatFetcherThread(video_id, nickname)
         self.thread.chat_fetched.connect(self.display_chats)
+        self.thread.chat_progress.connect(self.append_chat)  # ✅ 실시간 업데이트 연결
+
         self.thread.start()
+
+    def append_chat(self, chat_line):
+        self.chat_display.append(chat_line)   # ✅ 실시간으로 한 줄씩 추가
 
     def display_chats(self, chats, error_message):
         self.fetch_button.setEnabled(True)
