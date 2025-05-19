@@ -10,12 +10,12 @@ class ChatFetcherThread(QThread):
     chat_fetched = Signal(list, str)  # 기존 전체 전송용
     chat_progress = Signal(str)       # 🔥 실시간 채팅 전송용 추가
 
-    def __init__(self, video_id, search_keyword, mode):
+    def __init__(self, video_id, nickname_filter, message_filter):
         super().__init__()
         self.video_id = video_id
-        self.search_keyword = search_keyword
-        self.mode = mode
         self.seen_messages = set()
+        self.nickname_filter = nickname_filter
+        self.message_filter = message_filter
 
     def run(self):
         API_URL = f"https://api.chzzk.naver.com/service/v1/videos/{self.video_id}/chats"
@@ -67,12 +67,10 @@ class ChatFetcherThread(QThread):
                 chat_nickname = profile_data.get("nickname", "Unknown")
                 message = chat.get("content", "")
 
-                if self.mode == "nickname":
-                    match = chat_nickname == self.search_keyword
-                else:
-                    match = self.search_keyword in message
+                nickname_match = not self.nickname_filter or chat_nickname == self.nickname_filter
+                message_match = not self.message_filter or self.message_filter in message
 
-                if match and message_time not in self.seen_messages:
+                if nickname_match and message_match and message_time not in self.seen_messages:
                     formatted_chat = f'{self.format_time(message_time)} - {chat_nickname}: {message}'
                     filtered_chats.append(formatted_chat)
                     self.seen_messages.add(message_time)
@@ -111,16 +109,15 @@ class ChatFetcherApp(QWidget):
         self.video_id_input = QLineEdit()
         layout.addWidget(self.video_id_input)
 
-        self.label = QLabel("채팅을 수집할 닉네임을 입력해주세요!")
-        self.search_mode = "nickname"  # 기본: 닉네임 검색
-
-        self.mode_button = QPushButton("🔍 닉네임으로 검색 중 (클릭하여 전환)")
-        self.mode_button.clicked.connect(self.toggle_mode)
-        layout.addWidget(self.mode_button)
-        layout.addWidget(self.label)
-
+        self.nickname_label = QLabel("닉네임 필터 (선택 사항)")
+        layout.addWidget(self.nickname_label)
         self.nickname_input = QLineEdit()
         layout.addWidget(self.nickname_input)
+
+        self.message_label = QLabel("채팅 내용 필터 (선택 사항)")
+        layout.addWidget(self.message_label)
+        self.message_input = QLineEdit()
+        layout.addWidget(self.message_input)
 
         self.fetch_button = QPushButton("채팅 가져오기")
         self.fetch_button.clicked.connect(self.start_fetching)
@@ -150,19 +147,24 @@ class ChatFetcherApp(QWidget):
     def start_fetching(self):
         raw_video_id = self.video_id_input.text().strip()
         nickname = self.nickname_input.text().strip()
+        message = self.message_input.text().strip()
 
         # video_id가 URL이면 숫자만 추출
         match = re.search(r'/video/(\d+)', raw_video_id)
         video_id = match.group(1) if match else raw_video_id
 
-        if not video_id.isdigit() or not nickname:
-            self.chat_display.setText("❌ 영상 URL과 닉네임을 모두 입력해주세요!")
+        if not video_id.isdigit():
+            self.chat_display.setText("❌ 영상 URL을 입력해주셔야해요!")
+            return
+
+        if not nickname and not message:
+            self.chat_display.setText("❌ 닉네임 또는 채팅 내용을 하나 이상 입력해야 해요!")
             return
 
         self.chat_display.setText(f"🔍 영상 ID: {video_id} / 닉네임: '{nickname}'의 채팅 검색 중...\n")
         self.fetch_button.setEnabled(False)
 
-        self.thread = ChatFetcherThread(video_id, nickname, self.search_mode)
+        self.thread = ChatFetcherThread(video_id, nickname, message)
         self.thread.chat_fetched.connect(self.display_chats)
         self.thread.chat_progress.connect(self.append_chat)  # ✅ 실시간 업데이트 연결
 
@@ -179,7 +181,7 @@ class ChatFetcherApp(QWidget):
             return
 
         if chats:
-            html_text = f"<b>✅ '{self.nickname_input.text()}'의 전체 채팅 내역:</b><br>" + "<br>".join(chats)
+            html_text = f"<b>✅ 전체 채팅 내역!!" + "<br>".join(chats)
             self.chat_display.setHtml(html_text)
         else:
             self.chat_display.setText("\n🚨 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ")
