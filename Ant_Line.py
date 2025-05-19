@@ -108,83 +108,79 @@ class ChatFetcherApp(QWidget):
         self.setWindowTitle("CAnt")
         self.setGeometry(100, 100, 500, 600)
 
-        layout = QVBoxLayout()
+        main_layout = QHBoxLayout()  # 전체 수평 레이아웃
+        left_layout = QVBoxLayout()  # 좌측 입력 및 버튼들
 
-        # ✅ 채널 URL 입력
+        # 좌측 입력 영역
         self.id_label = QLabel("치지직 채널 링크를 입력해주세요!")
-        layout.addWidget(self.id_label)
+        left_layout.addWidget(self.id_label)
 
         self.channel_url_input = QLineEdit()
-        layout.addWidget(self.channel_url_input)
+        left_layout.addWidget(self.channel_url_input)
 
-        # ✅ VOD 불러오기 버튼
         self.load_vods_button = QPushButton("VOD 불러오기")
         self.load_vods_button.clicked.connect(self.load_vod_list)
-        layout.addWidget(self.load_vods_button)
+        left_layout.addWidget(self.load_vods_button)
 
-        # ✅ 전체 선택 버튼
         self.select_all_button = QPushButton("전체 선택 / 해제")
         self.select_all_button.clicked.connect(self.toggle_all_checkboxes)
-        layout.addWidget(self.select_all_button)
+        left_layout.addWidget(self.select_all_button)
 
-        # ✅ 체크박스 리스트용 스크롤 영역
         self.vod_scroll_area = QScrollArea()
         self.vod_list_widget = QWidget()
         self.vod_list_layout = QVBoxLayout()
         self.vod_list_widget.setLayout(self.vod_list_layout)
         self.vod_scroll_area.setWidget(self.vod_list_widget)
         self.vod_scroll_area.setWidgetResizable(True)
-        layout.addWidget(self.vod_scroll_area, stretch=1)
-
-        # 나머지 nickname_input, message_input, fetch_button 등 기존 코드 그대로 아래에 이어서 작성
-
+        left_layout.addWidget(self.vod_scroll_area, stretch=1)
 
         self.nickname_label = QLabel("닉네임을 입력해주세요!")
-        layout.addWidget(self.nickname_label)
+        left_layout.addWidget(self.nickname_label)
+
         self.nickname_input = QLineEdit()
-        layout.addWidget(self.nickname_input)
+        left_layout.addWidget(self.nickname_input)
 
         self.message_label = QLabel("검색하실 채팅 내용을 입력해주세요!")
-        layout.addWidget(self.message_label)
+        left_layout.addWidget(self.message_label)
+
         self.message_input = QLineEdit()
-        layout.addWidget(self.message_input)
+        left_layout.addWidget(self.message_input)
 
         self.fetch_button = QPushButton("채팅 가져오기!")
         self.fetch_button.clicked.connect(self.start_fetching)
-        layout.addWidget(self.fetch_button)
-
-        # ✅ 오류 해결을 위한 chat_display 위젯 추가
-        self.chat_display = QTextBrowser()
-        self.chat_display.setOpenExternalLinks(True)
-        self.chat_display.setReadOnly(True)
-        layout.addWidget(self.chat_display)
-
-        self.chat_tabs = QTabWidget()
-        self.chat_display.setOpenExternalLinks(True)
-        self.chat_display.setReadOnly(True)
-        layout.addWidget(self.chat_tabs)
+        left_layout.addWidget(self.fetch_button)
 
         self.save_button = QPushButton("파일로 저장하기!")
         self.save_button.clicked.connect(self.save_to_file)
-        layout.addWidget(self.save_button)
+        left_layout.addWidget(self.save_button)
 
-        self.setLayout(layout)
+        # 우측 채팅 결과 탭 영역
+        self.chat_tabs = QTabWidget()
+        self.chat_tabs.setMinimumWidth(400)
+        self.chat_tabs.setTabsClosable(False)
+
+        # 최종 레이아웃에 적용
+        main_layout.addLayout(left_layout, 2)
+        main_layout.addWidget(self.chat_tabs, 3)
+
+        self.setLayout(main_layout)
+
 
 
     def start_fetching(self):
         selected_videos = [cb for cb in self.vod_checkboxes if cb.isChecked()]
         if not selected_videos:
-            self.chat_display.setText("❌ 채팅을 가져올 VOD를 선택해주세요!")
+            QMessageBox.warning(self, "알림", "❌ 채팅을 가져올 VOD를 선택해주세요!")
             return
 
         nickname = self.nickname_input.text().strip()
         message = self.message_input.text().strip()
 
         if not nickname and not message:
-            self.chat_display.setText("❌ 닉네임 또는 채팅 내용을 하나 이상 입력해야 해요!")
+            QMessageBox.warning(self, "알림", "❌ 닉네임 또는 채팅 내용을 하나 이상 입력해야 해요!")
             return
 
-        self.chat_display.setText("🔍 선택한 영상들의 채팅을 순차적으로 가져오는 중...\n")
+        QMessageBox.warning(self, "알림", "🔍 선택한 영상들의 채팅을 순차적으로 가져오는 중...\n")
         self.fetch_button.setEnabled(False)
 
         self.filtered_chats = []
@@ -200,13 +196,25 @@ class ChatFetcherApp(QWidget):
     def start_next_thread(self):
         if self.current_thread_index >= len(self.thread_queue):
             self.fetch_button.setEnabled(True)
-            self.chat_display.append("✅ 모든 영상의 채팅 수집이 완료되었습니다!\n")
+            QMessageBox.information(self, "완료", "✅ 모든 영상의 채팅 수집이 완료되었습니다!")
             return
 
         video_id, nickname, message = self.thread_queue[self.current_thread_index]
         thread = ChatFetcherThread(video_id, nickname, message)
         thread.chat_fetched.connect(self.handle_thread_finished)
         thread.chat_progress.connect(self.append_chat)
+
+        # ✅ 실시간 출력용 탭 미리 만들기
+        self.live_tab = QTextBrowser()
+        self.live_tab.setOpenExternalLinks(True)
+
+        matching_vod = next((vod for vod in self.vod_data_list if str(vod["videoNo"]) == video_id), None)
+        if matching_vod:
+            tab_title = f'{matching_vod["publishDate"]} - {matching_vod["videoTitle"]}'
+        else:
+            tab_title = f'영상 {video_id}'
+
+        self.chat_tabs.addTab(self.live_tab, tab_title)
 
         self.current_thread = thread
         thread.start()
@@ -216,40 +224,41 @@ class ChatFetcherApp(QWidget):
         self.fetch_button.setEnabled(True)
 
         if error_message:
-            self.chat_display.append(f"<b>🚨 [{video_id}] 오류:</b> {error_message}<br>")
+            QMessageBox.information(f"<b>🚨 [{video_id}] 오류:</b> {error_message}<br>")
             return
 
         if chats:
             count = len(chats)
             html_text = f"<b>✅ [영상 {video_id}] 채팅 내역 ({count}개)</b><br>" + "<br>".join(chats) + "<br><br>"
-            self.chat_display.append(html_text)
+            QMessageBox.information(html_text)
             self.filtered_chats.extend(chats)
         else:
-            self.chat_display.append(f"<b>🚨 [영상 {video_id}] 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ</b><br><br>")
+            QMessageBox.information(f"<b>🚨 [영상 {video_id}] 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ</b><br><br>")
 
 
     def handle_thread_finished(self, chats, error_message, video_id):
+        if not hasattr(self, "live_tab"):
+            return  # 예외 방지
+
+        # ⚠️ 실시간 탭에 마무리 메시지 추가
         if error_message:
-            content = f"<b>🚨 [{video_id}] 오류:</b> {error_message}<br>"
+            self.live_tab.append(f"<b>🚨 [{video_id}] 오류:</b> {error_message}<br>")
         elif chats:
             count = len(chats)
-            content = f"<b>✅ [영상 {video_id}] 채팅 내역 ({count}개)</b><br>" + "<br>".join(chats) + "<br><br>"
+            self.live_tab.append(f"<br><b>✅ [영상 {video_id}] 채팅 내역 ({count}개)</b><br><br>")
         else:
-            content = f"<b>🚨 [영상 {video_id}] 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ</b><br><br>"
+            self.live_tab.append(f"<b>🚨 [영상 {video_id}] 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ</b><br><br>")
 
-        # ✅ 탭 생성 및 채팅 출력
-        tab = QTextBrowser()
-        tab.setHtml(content)
-        tab.setOpenExternalLinks(True)
-
-        # 제목은 날짜 + 제목으로 구성
+        # 🔧 탭 제목 수정 (publishDate + videoTitle)
         matching_vod = next((vod for vod in self.vod_data_list if str(vod["videoNo"]) == video_id), None)
         if matching_vod:
             tab_title = f'{matching_vod["publishDate"]} - {matching_vod["videoTitle"]}'
         else:
             tab_title = f'영상 {video_id}'
 
-        self.chat_tabs.addTab(tab, tab_title)
+        index = self.chat_tabs.indexOf(self.live_tab)
+        if index != -1:
+            self.chat_tabs.setTabText(index, tab_title)
 
         self.filtered_chats.extend(chats)
         self.current_thread_index += 1
@@ -258,14 +267,17 @@ class ChatFetcherApp(QWidget):
 
 
 
+
     def append_chat(self, chat_line):
-        self.chat_display.append(chat_line)   # ✅ 실시간으로 한 줄씩 추가
+        if hasattr(self, "live_tab"):
+            self.live_tab.append(chat_line)
+
 
     def display_chats(self, chats, error_message):
         self.fetch_button.setEnabled(True)
 
         if error_message:
-            self.chat_display.setText(error_message)
+            QMessageBox.warning(error_message)
             return
 
         if chats:
@@ -273,7 +285,7 @@ class ChatFetcherApp(QWidget):
             html_text = f"<b>✅ 전체 채팅 내역!! ({count}개)</b><br>" + "<br>".join(chats)
             self.chat_display.setHtml(html_text)
         else:
-            self.chat_display.setText("\n🚨 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ")
+            QMessageBox.warning(self, "알림", "\n🚨 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ")
 
         self.filtered_chats = chats
 
@@ -316,6 +328,16 @@ class ChatFetcherApp(QWidget):
 
             QMessageBox.information(self, "저장 완료", f"✅ 총 {total_chat_count}개의 채팅이 저장되었어요!")
 
+    def closeEvent(self, event):
+        try:
+            if hasattr(self, "current_thread") and self.current_thread.isRunning():
+                print("🛑 스레드 종료 시도 중...")
+                self.current_thread.quit()
+                self.current_thread.wait()
+                print("✅ 스레드 정상 종료됨.")
+        except Exception as e:
+            print(f"❌ 스레드 종료 중 오류 발생: {e}")
+        event.accept()
 
 
 
