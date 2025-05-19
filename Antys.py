@@ -184,6 +184,8 @@ class ChatFetcherApp(QWidget):
         main_layout.addLayout(left_layout, 3)
         main_layout.addWidget(self.chat_tabs, 3)
 
+        self.select_all_warned = False
+
         self.setLayout(main_layout)
 
 
@@ -415,12 +417,17 @@ class ChatFetcherApp(QWidget):
         if not self.vod_checkboxes:
             return
 
+        if not self.select_all_warned:
+            QMessageBox.information(self, "경고!!", "너무 많은 데이터를 상습적으로 불러올 경우 서버에 부하가 가서 네이버가 화를 많이 낼 수 있어요!!")
+            self.select_all_warned = True
+
         if any(not cb.isChecked() for cb in self.vod_checkboxes):
             for cb in self.vod_checkboxes:
                 cb.setChecked(True)
         else:
             for cb in self.vod_checkboxes:
                 cb.setChecked(False)
+
 
 class ClosableTabWidget(QTabWidget):
     def __init__(self):
