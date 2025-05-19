@@ -113,6 +113,7 @@ class ChatFetcherApp(QWidget):
         self.vod_checkboxes = []
         self.vod_data_list = []
 
+        self.setWindowIcon(QIcon("Antys.ico"))
         self.setWindowTitle("Antys")
         self.setGeometry(100, 100, 1000, 600)
 
