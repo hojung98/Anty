@@ -2,9 +2,8 @@ import requests
 import json
 import sys
 import re
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QFileDialog
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QFileDialog, QScrollArea, QCheckBox, QMessageBox, QHBoxLayout
 from PySide6.QtCore import QThread, Signal
-
 
 class ChatFetcherThread(QThread):
     chat_fetched = Signal(list, str)  # 기존 전체 전송용
@@ -99,15 +98,42 @@ class ChatFetcherApp(QWidget):
     def __init__(self):
         super().__init__()
 
+        self.vod_checkboxes = []
+        self.vod_data_list = []
+
         self.setWindowTitle("CAnt")
         self.setGeometry(100, 100, 500, 600)
 
         layout = QVBoxLayout()
-        self.id_label = QLabel("치지직 다시보기 URL을 입력해주세요!")
+
+        # ✅ 채널 URL 입력
+        self.id_label = QLabel("치지직 채널 링크를 입력해주세요!")
         layout.addWidget(self.id_label)
 
-        self.video_id_input = QLineEdit()
-        layout.addWidget(self.video_id_input)
+        self.channel_url_input = QLineEdit()
+        layout.addWidget(self.channel_url_input)
+
+        # ✅ VOD 불러오기 버튼
+        self.load_vods_button = QPushButton("VOD 불러오기")
+        self.load_vods_button.clicked.connect(self.load_vod_list)
+        layout.addWidget(self.load_vods_button)
+
+        # ✅ 전체 선택 버튼
+        self.select_all_button = QPushButton("전체 선택 / 해제")
+        self.select_all_button.clicked.connect(self.toggle_all_checkboxes)
+        layout.addWidget(self.select_all_button)
+
+        # ✅ 체크박스 리스트용 스크롤 영역
+        self.vod_scroll_area = QScrollArea()
+        self.vod_list_widget = QWidget()
+        self.vod_list_layout = QVBoxLayout()
+        self.vod_list_widget.setLayout(self.vod_list_layout)
+        self.vod_scroll_area.setWidget(self.vod_list_widget)
+        self.vod_scroll_area.setWidgetResizable(True)
+        layout.addWidget(self.vod_scroll_area, stretch=1)
+
+        # 나머지 nickname_input, message_input, fetch_button 등 기존 코드 그대로 아래에 이어서 작성
+
 
         self.nickname_label = QLabel("닉네임을 입력해주세요!")
         layout.addWidget(self.nickname_label)
@@ -135,17 +161,17 @@ class ChatFetcherApp(QWidget):
         self.setLayout(layout)
 
     def start_fetching(self):
-        raw_video_id = self.video_id_input.text().strip()
+        selected_videos = [cb for cb in self.vod_checkboxes if cb.isChecked()]
+        if not selected_videos:
+            self.chat_display.setText("❌ 채팅을 가져올 VOD를 선택해주세요!")
+            return
+
+        # ⚠️ 여러 개 선택되었더라도 일단 첫 번째 것만 사용 (멀티 처리할 거면 여기 반복문으로 바꾸면 됨)
+        selected_checkbox = selected_videos[0]
+        video_id = selected_checkbox.video_id
+
         nickname = self.nickname_input.text().strip()
         message = self.message_input.text().strip()
-
-        # video_id가 URL이면 숫자만 추출
-        match = re.search(r'/video/(\d+)', raw_video_id)
-        video_id = match.group(1) if match else raw_video_id
-
-        if not video_id.isdigit():
-            self.chat_display.setText("❌ 영상 URL을 입력해주셔야해요!")
-            return
 
         if not nickname and not message:
             self.chat_display.setText("❌ 닉네임 또는 채팅 내용을 하나 이상 입력해야 해요!")
@@ -157,8 +183,8 @@ class ChatFetcherApp(QWidget):
         self.thread = ChatFetcherThread(video_id, nickname, message)
         self.thread.chat_fetched.connect(self.display_chats)
         self.thread.chat_progress.connect(self.append_chat)  # ✅ 실시간 업데이트 연결
-
         self.thread.start()
+
 
     def append_chat(self, chat_line):
         self.chat_display.append(chat_line)   # ✅ 실시간으로 한 줄씩 추가
@@ -188,7 +214,8 @@ class ChatFetcherApp(QWidget):
         if file_name:
             with open(file_name, "w", encoding="utf-8") as file:
                 # 🔥 영상 URL 맨 위에 삽입
-                video_id = self.video_id_input.text().strip()
+                selected_videos = [cb for cb in self.vod_checkboxes if cb.isChecked()]
+                video_id = selected_videos[0].video_id if selected_videos else "unknown"
                 match = re.search(r'/video/(\d+)', video_id)
                 video_id = match.group(1) if match else video_id
                 file.write(f"https://chzzk.naver.com/video/{video_id}\n")
@@ -202,6 +229,69 @@ class ChatFetcherApp(QWidget):
 
             self.chat_display.append("\n✅ 채팅 내역이 저장되었어요!")
 
+    def load_vod_list(self):
+        url = self.channel_url_input.text().strip()
+        match = re.search(r'/([a-z0-9]{32})$', url)
+        if not match:
+            QMessageBox.warning(self, "오류", "올바른 채널 URL을 입력해주세요!")
+            return
+
+        channel_id = match.group(1)
+        print(f"📡 채널 ID 추출됨: {channel_id}")
+
+        self.vod_checkboxes.clear()
+        for i in reversed(range(self.vod_list_layout.count())):
+            self.vod_list_layout.itemAt(i).widget().setParent(None)
+
+        self.vod_data_list = []
+        page = 0
+
+        while True:
+            api_url = (
+                f"https://api.chzzk.naver.com/service/v1/channels/"
+                f"{channel_id}/videos?sortType=LATEST&pagingType=PAGE&page={page}&size=18"
+            )
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "Referer": "https://chzzk.naver.com/"
+            }
+
+            response = requests.get(api_url, headers=headers, timeout=10)
+
+            if response.status_code != 200:
+                QMessageBox.critical(self, "에러", f"VOD 목록을 가져오는 데 실패했습니다.\n코드: {response.status_code}")
+                return
+
+            data = response.json().get("content", {}).get("data", [])
+            if not data:
+                break
+
+            self.vod_data_list.extend(data)
+            for video in data:
+                title = video["videoTitle"]
+                date = video["publishDate"]
+                video_id = video["videoId"]
+                checkbox = QCheckBox(f"{date} - {title}")
+                checkbox.video_id = str(video["videoNo"])
+                self.vod_list_layout.addWidget(checkbox)
+                self.vod_checkboxes.append(checkbox)
+
+            page += 1
+
+        QMessageBox.information(self, "완료", f"✅ 총 {len(self.vod_checkboxes)}개의 VOD를 불러왔습니다.")
+
+    def toggle_all_checkboxes(self):
+        if not self.vod_checkboxes:
+            return
+
+        # 하나라도 체크 안 되어 있으면 전체 체크 / 모두 체크되어 있으면 전체 해제
+        if any(not cb.isChecked() for cb in self.vod_checkboxes):
+            for cb in self.vod_checkboxes:
+                cb.setChecked(True)
+        else:
+            for cb in self.vod_checkboxes:
+                cb.setChecked(False)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
