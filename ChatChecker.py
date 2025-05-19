@@ -51,12 +51,18 @@ class ChatFetcherThread(QThread):
                 profile_str = chat.get("profile")
                 message_time = chat.get("playerMessageTime", 0)
 
+                profile_data = {}
                 if profile_str:
-                    profile_data = json.loads(profile_str)
-                    chat_nickname = profile_data.get("nickname", "Unknown")
-                else:
-                    chat_nickname = "Unknown"
+                    try:
+                        loaded = json.loads(profile_str)
+                        if isinstance(loaded, dict):  # ✅ 이게 중요
+                            profile_data = loaded
+                        else:
+                            print(f"⚠️ [무시됨] profile_str가 dict가 아님: {profile_str}")
+                    except json.JSONDecodeError:
+                        print(f"⚠️ [파싱 실패] profile_str: {profile_str}")
 
+                chat_nickname = profile_data.get("nickname", "Unknown")
                 message = chat.get("content", "")
 
                 if chat_nickname == self.target_nickname and message_time not in self.seen_messages:
