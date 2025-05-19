@@ -24,46 +24,53 @@ class ChatFetcherThread(QThread):
             "Referer": f"https://chzzk.naver.com/video/{self.video_id}"
         }
 
-        START_TIME = 0
-        END_TIME = 400000
-        STEP = 40000
-
+        current_time = 0
         filtered_chats = []
 
-        for playerMessageTime in range(START_TIME, END_TIME, STEP):
-            params = {"playerMessageTime": str(playerMessageTime)}
+        print("🚀 [시작] 채팅 수집 시작됨")
+
+        while True:
+            print(f"📡 [요청] playerMessageTime={current_time}")
+            params = {"playerMessageTime": str(current_time)}
             response = requests.get(API_URL, headers=headers, params=params)
 
-            if response.status_code == 200:
-                chat_data = response.json()
-                video_chats = chat_data.get("content", {}).get("videoChats", [])
-
-                if not video_chats:
-                    continue
-
-                for chat in video_chats:
-                    profile_str = chat.get("profile")
-                    message_time = chat.get("playerMessageTime", 0)
-
-                    if profile_str:
-                        profile_data = json.loads(profile_str)
-                        chat_nickname = profile_data.get("nickname", "Unknown")
-                    else:
-                        chat_nickname = "Unknown"
-
-                    message = chat.get("content", "")
-
-                    if chat_nickname == self.target_nickname:
-                        if message_time not in self.seen_messages:
-                            formatted_chat = f'{self.format_time(message_time)} - {chat_nickname}: {message}'
-                            filtered_chats.append(formatted_chat)
-                            self.seen_messages.add(message_time)
-
-            else:
+            if response.status_code != 200:
+                print(f"❌ [에러] HTTP 상태 코드: {response.status_code}")
                 self.chat_fetched.emit([], f"🚨 요청 실패! HTTP 상태 코드: {response.status_code}")
                 return
 
+            chat_data = response.json()
+            video_chats = chat_data.get("content", {}).get("videoChats", [])
+            print(f"📥 [응답] 채팅 수: {len(video_chats)}")
+
+            if not video_chats:
+                print("✅ [완료] 더 이상 가져올 채팅이 없습니다. 수집 종료.")
+                break
+
+            for chat in video_chats:
+                profile_str = chat.get("profile")
+                message_time = chat.get("playerMessageTime", 0)
+
+                if profile_str:
+                    profile_data = json.loads(profile_str)
+                    chat_nickname = profile_data.get("nickname", "Unknown")
+                else:
+                    chat_nickname = "Unknown"
+
+                message = chat.get("content", "")
+
+                if chat_nickname == self.target_nickname and message_time not in self.seen_messages:
+                    formatted_chat = f'{self.format_time(message_time)} - {chat_nickname}: {message}'
+                    filtered_chats.append(formatted_chat)
+                    self.seen_messages.add(message_time)
+                    print(f"💬 [채팅] {formatted_chat}")
+
+            current_time = video_chats[-1]["playerMessageTime"] + 1
+
+        print(f"📦 [결과] 총 수집된 채팅 수: {len(filtered_chats)}")
         self.chat_fetched.emit(filtered_chats, None)
+
+
 
     def format_time(self, milliseconds):
         """밀리초를 hh:mm:ss 형식으로 변환하고 링크로 감싸 반환"""
