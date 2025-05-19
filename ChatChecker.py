@@ -181,7 +181,7 @@ class ChatFetcherApp(QWidget):
             return
 
         if chats:
-            html_text = f"<b>✅ 전체 채팅 내역!!" + "<br>".join(chats)
+            html_text = "<b>✅ 전체 채팅 내역!!</b><br>" + "<br>".join(chats)
             self.chat_display.setHtml(html_text)
         else:
             self.chat_display.setText("\n🚨 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ")
