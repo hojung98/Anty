@@ -290,35 +290,32 @@ class ChatFetcherApp(QWidget):
                 for i in range(self.chat_tabs.count()):
                     tab = self.chat_tabs.widget(i)
                     title = self.chat_tabs.tabText(i)
-                    content = tab.toHtml()  # HTML로 가져와서 링크 파싱 가능
+                    plain_text = tab.toPlainText().strip()  # ✅ HTML 대신 순수 텍스트로 가져오기
 
-                    # 🔥 하이퍼링크 제거: <a href="...">00:00:33</a> → 00:00:33
-                    plain_lines = []
-                    for line in content.split("<br>"):
-                        plain_line = re.sub(r'<a href="[^"]+">([^<]+)</a>', r'\1', line)
-                        plain_line = re.sub(r"<[^>]+>", "", plain_line)  # HTML 태그 제거
-                        plain_line = plain_line.strip()
-                        if plain_line:
-                            plain_lines.append(plain_line)
+                    # 채팅 줄로 분리
+                    lines = plain_text.splitlines()
+                    chat_lines = [line.strip() for line in lines if line.strip() and not line.startswith("🚨")]
 
-                    # 🔥 video_id 추출용 (탭 제목에 포함된 정보 또는 저장된 리스트에서 탐색)
+                    # 🔍 video_id → URL 생성
                     matching_vod = self.vod_data_list[i] if i < len(self.vod_data_list) else None
                     video_url = "https://chzzk.naver.com/"
                     if matching_vod:
                         video_id = matching_vod["videoId"]
                         video_url = f"https://chzzk.naver.com/video/{video_id}"
 
+                    # 파일 작성
                     file.write(f"===== {title} =====\n")
                     file.write(f"{video_url}\n")
-                    file.write(f"총 채팅 수: {len(plain_lines)}개\n\n")
+                    file.write(f"총 채팅 수: {len(chat_lines)}개\n\n")
 
-                    for line in plain_lines:
+                    for line in chat_lines:
                         file.write(line + "\n")
 
                     file.write("\n\n")
-                    total_chat_count += len(plain_lines)
+                    total_chat_count += len(chat_lines)
 
             QMessageBox.information(self, "저장 완료", f"✅ 총 {total_chat_count}개의 채팅이 저장되었어요!")
+
 
 
 
