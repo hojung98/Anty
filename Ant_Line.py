@@ -20,10 +20,13 @@ class ChatFetcherThread(QThread):
         self.message_filter = message_filter
         self.thread_queue = []
         self.current_thread_index = 0
+        self._is_running = True
+
+    def stop(self):
+        self._is_running = False
 
     def run(self):
         API_URL = f"https://api.chzzk.naver.com/service/v1/videos/{self.video_id}/chats"
-
         headers = {
             "Accept": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0",
@@ -35,25 +38,28 @@ class ChatFetcherThread(QThread):
 
         print("채팅 수집 시작!")
 
-        while True:
+        while self._is_running:
             print(f"[요청] playerMessageTime={current_time}")
             params = {"playerMessageTime": str(current_time)}
             response = requests.get(API_URL, headers=headers, params=params)
 
             if response.status_code != 200:
-                print(f"!!! [에러] HTTP 상태 코드: {response.status_code} !!!")
+                print(f"!!! HTTP 상태 코드: {response.status_code} !!!")
                 self.chat_fetched.emit([], f"!!! 요청 실패! HTTP 상태 코드: {response.status_code} !!!", self.video_id)
                 return
 
             chat_data = response.json()
             video_chats = chat_data.get("content", {}).get("videoChats", [])
-            print(f"📥 [응답] 채팅 수: {len(video_chats)}")
+            print(f"[응답] 채팅 수: {len(video_chats)}")
 
             if not video_chats:
-                print(" [완료] 더 이상 가져올 채팅이 없네요! 수집을 종료할께요!")
+                print("[완료] 더 이상 가져올 채팅이 없네요! 수집을 종료할께요!")
                 break
 
             for chat in video_chats:
+                if not self._is_running:
+                    break
+
                 profile_str = chat.get("profile")
                 message_time = chat.get("playerMessageTime", 0)
 
@@ -83,8 +89,9 @@ class ChatFetcherThread(QThread):
 
             current_time = video_chats[-1]["playerMessageTime"] + 1
 
-        print(f"📦 [결과] 총 수집된 채팅 수: {len(filtered_chats)}")
+        print(f"[결과] 총 수집된 채팅 수는... {len(filtered_chats)}")
         self.chat_fetched.emit(filtered_chats, None, self.video_id)
+
 
 
 
@@ -210,7 +217,7 @@ class ChatFetcherApp(QWidget):
     def start_next_thread(self):
         if self.current_thread_index >= len(self.thread_queue):
             self.fetch_button.setEnabled(True)
-            QMessageBox.information(self, "완료완료!!", "✅ 모든 영상의 채팅 수집이 완료되었습니다!")
+            QMessageBox.information(self, "완료완료!!", "모든 영상의 채팅 수집이 완료되었습니다!")
             return
 
         video_id, nickname, message = self.thread_queue[self.current_thread_index]
@@ -242,7 +249,7 @@ class ChatFetcherApp(QWidget):
 
         if chats:
             count = len(chats)
-            html_text = f"<b>✅ [영상 {video_id}] 채팅 내역 ({count}개)</b><br>" + "<br>".join(chats) + "<br><br>"
+            html_text = f"<b> [영상 {video_id}] 채팅 내역 ({count}개)</b><br>" + "<br>".join(chats) + "<br><br>"
             QMessageBox.information(html_text)
             self.filtered_chats.extend(chats)
         else:
@@ -296,13 +303,13 @@ class ChatFetcherApp(QWidget):
             html_text = f"<b>✅ 전체 채팅 내역!! ({count}개)</b><br>" + "<br>".join(chats)
             self.chat_display.setHtml(html_text)
         else:
-            QMessageBox.warning(self, "알림", "\n🚨 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ")
+            QMessageBox.warning(self, "알림", "해당 닉네임의 채팅을 찾을 수 없어요 ㅠ")
 
         self.filtered_chats = chats
 
     def save_to_file(self):
         if self.chat_tabs.count() == 0:
-            QMessageBox.information(self, "저장 실패", "❌ 저장할 채팅 탭이 없어요!")
+            QMessageBox.information(self, "저장 실패", "저장할 채팅 탭이 없어요...")
             return
 
         file_name, _ = QFileDialog.getSaveFileName(self, "파일 저장", "chat_log.txt", "Text Files (*.txt);;All Files (*)")
@@ -334,17 +341,18 @@ class ChatFetcherApp(QWidget):
                     file.write("\n\n")
                     total_chat_count += len(chat_lines)
 
-            QMessageBox.information(self, "저장 완료", f"✅ 총 {total_chat_count}개의 채팅이 저장되었어요!")
+            QMessageBox.information(self, "저장 완료", f" 총 {total_chat_count}개의 채팅이 저장되었어요!")
 
     def closeEvent(self, event):
         try:
             if hasattr(self, "current_thread") and self.current_thread.isRunning():
-                print("🛑 스레드 종료 시도 중...")
+                print("스레드 종료 시도 중...")
+                self.current_thread.stop()
                 self.current_thread.quit()
                 self.current_thread.wait()
-                print("✅ 스레드 정상 종료됨.")
+                print("스레드 정상 종료됨.")
         except Exception as e:
-            print(f"❌ 스레드 종료 중 오류 발생: {e}")
+            print(f"스레드 종료 중 오류 발생: {e}")
         event.accept()
 
 
@@ -353,11 +361,11 @@ class ChatFetcherApp(QWidget):
         url = self.channel_url_input.text().strip()
         match = re.search(r'/([a-z0-9]{32})$', url)
         if not match:
-            QMessageBox.warning(self, "오류", "올바른 채널 URL을 입력해주세요!")
+            QMessageBox.warning(self, "인식 불가!", "인식 가능한 링크가 아니에요!\n팔로우 목록에서 스트리머 분 누르면 나오는 그 페이지의 링크가 필요해요!")
             return
 
         channel_id = match.group(1)
-        print(f"📡 채널 ID 추출됨: {channel_id}")
+        print(f"채널 ID 추출됨: {channel_id}")
 
         self.vod_checkboxes.clear()
         for i in reversed(range(self.vod_list_layout.count())):
@@ -380,7 +388,7 @@ class ChatFetcherApp(QWidget):
             response = requests.get(api_url, headers=headers, timeout=10)
 
             if response.status_code != 200:
-                QMessageBox.critical(self, "에러", f"방송일자를 가져오는 데 실패했어요 ㅠㅠㅠ 옆에 코드를 카페나 다른 방법을 통해 저에게 불러주시면 도와드릴께요 ㅠ \n코드: {response.status_code}")
+                QMessageBox.critical(self, "에러에러", f"다시보기를 가져오는 데 실패했어요 ㅠㅠㅠ\n옆에 코드를 카페나 다른 방법을 통해 저에게 불러주시면 도와드릴께요 ㅠ \n코드: {response.status_code}")
                 return
 
             data = response.json().get("content", {}).get("data", [])
@@ -399,7 +407,7 @@ class ChatFetcherApp(QWidget):
 
             page += 1
 
-        QMessageBox.information(self, "완료", f"✅ 총 {len(self.vod_checkboxes)}개의 방송일자를 불러왔습니다. 채팅을 불러올 날짜를 선택해주세요!")
+        QMessageBox.information(self, "있었어요!", f"총 {len(self.vod_checkboxes)}개의 다시보기를 불러왔어용 ㅎㅎ\n채팅을 불러올 다시보기를 선택해주세요!")
 
     def toggle_all_checkboxes(self):
         if not self.vod_checkboxes:
@@ -415,7 +423,6 @@ class ChatFetcherApp(QWidget):
 class ClosableTabWidget(QTabWidget):
     def __init__(self):
         super().__init__()
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
         self.setTabsClosable(False)
 
