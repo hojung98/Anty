@@ -10,10 +10,11 @@ class ChatFetcherThread(QThread):
     chat_fetched = Signal(list, str)  # 기존 전체 전송용
     chat_progress = Signal(str)       # 🔥 실시간 채팅 전송용 추가
 
-    def __init__(self, video_id, target_nickname):
+    def __init__(self, video_id, search_keyword, mode):
         super().__init__()
         self.video_id = video_id
-        self.target_nickname = target_nickname
+        self.search_keyword = search_keyword
+        self.mode = mode
         self.seen_messages = set()
 
     def run(self):
@@ -66,7 +67,12 @@ class ChatFetcherThread(QThread):
                 chat_nickname = profile_data.get("nickname", "Unknown")
                 message = chat.get("content", "")
 
-                if chat_nickname == self.target_nickname and message_time not in self.seen_messages:
+                if self.mode == "nickname":
+                    match = chat_nickname == self.search_keyword
+                else:
+                    match = self.search_keyword in message
+
+                if match and message_time not in self.seen_messages:
                     formatted_chat = f'{self.format_time(message_time)} - {chat_nickname}: {message}'
                     filtered_chats.append(formatted_chat)
                     self.seen_messages.add(message_time)
@@ -106,6 +112,11 @@ class ChatFetcherApp(QWidget):
         layout.addWidget(self.video_id_input)
 
         self.label = QLabel("채팅을 수집할 닉네임을 입력해주세요!")
+        self.search_mode = "nickname"  # 기본: 닉네임 검색
+
+        self.mode_button = QPushButton("🔍 닉네임으로 검색 중 (클릭하여 전환)")
+        self.mode_button.clicked.connect(self.toggle_mode)
+        layout.addWidget(self.mode_button)
         layout.addWidget(self.label)
 
         self.nickname_input = QLineEdit()
@@ -126,6 +137,16 @@ class ChatFetcherApp(QWidget):
 
         self.setLayout(layout)
 
+    def toggle_mode(self):
+        if self.search_mode == "nickname":
+            self.search_mode = "message"
+            self.mode_button.setText("💬 채팅내용으로 검색 중 (클릭하여 전환)")
+            self.label.setText("검색할 채팅 내용을 입력해주세요!")
+        else:
+            self.search_mode = "nickname"
+            self.mode_button.setText("🔍 닉네임으로 검색 중 (클릭하여 전환)")
+            self.label.setText("채팅을 수집할 닉네임을 입력해주세요!")
+
     def start_fetching(self):
         raw_video_id = self.video_id_input.text().strip()
         nickname = self.nickname_input.text().strip()
@@ -141,7 +162,7 @@ class ChatFetcherApp(QWidget):
         self.chat_display.setText(f"🔍 영상 ID: {video_id} / 닉네임: '{nickname}'의 채팅 검색 중...\n")
         self.fetch_button.setEnabled(False)
 
-        self.thread = ChatFetcherThread(video_id, nickname)
+        self.thread = ChatFetcherThread(video_id, nickname, self.search_mode)
         self.thread.chat_fetched.connect(self.display_chats)
         self.thread.chat_progress.connect(self.append_chat)  # ✅ 실시간 업데이트 연결
 
