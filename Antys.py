@@ -201,7 +201,7 @@ class ChatFetcherApp(QWidget):
             QMessageBox.warning(self, "하나도 입력 안댐!!", "아무리 그래두 닉네임 또는 채팅 내용 중 하나 이상은 입력해야 해요!")
             return
 
-        QMessageBox.warning(self, "모든 준비 완료!!!", "선택한 영상들의 채팅을 가져올께요!!\n")
+        QMessageBox.warning(self, "모든 준비 완료!!!", "선택한 영상들의 채팅을 가져올께요!!\n불러와지는 채팅 옆 시간을 누르시면 해당 다시보기로 연결되어요!!")
         self.fetch_button.setEnabled(False)
 
         self.filtered_chats = []
@@ -341,7 +341,9 @@ class ChatFetcherApp(QWidget):
                     file.write("\n\n")
                     total_chat_count += len(chat_lines)
 
-            QMessageBox.information(self, "저장 완료", f" 총 {total_chat_count}개의 채팅이 저장되었어요!")
+            selected_vod_count = self.chat_tabs.count()
+            QMessageBox.information(self, "저장 완료", f"총 {selected_vod_count}개의 다시보기 속 {total_chat_count}개의 채팅이 저장되었어요! 짝짝짝")
+
 
     def closeEvent(self, event):
         try:
