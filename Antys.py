@@ -5,7 +5,7 @@ import re
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QFileDialog, QScrollArea, QCheckBox, QMessageBox, QHBoxLayout, QTextEdit, QTabWidget, QMenu
 from PySide6.QtCore import QThread, Signal
 from functools import partial
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QIcon
 
 class ChatFetcherThread(QThread):
     chat_fetched = Signal(list, str, object)
