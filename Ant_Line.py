@@ -2,7 +2,7 @@ import requests
 import json
 import sys
 import re
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QFileDialog, QScrollArea, QCheckBox, QMessageBox, QHBoxLayout
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QFileDialog, QScrollArea, QCheckBox, QMessageBox, QHBoxLayout, QTabWidget, QTextEdit
 from PySide6.QtCore import QThread, Signal
 from functools import partial
 
@@ -153,10 +153,16 @@ class ChatFetcherApp(QWidget):
         self.fetch_button.clicked.connect(self.start_fetching)
         layout.addWidget(self.fetch_button)
 
+        # ✅ 오류 해결을 위한 chat_display 위젯 추가
         self.chat_display = QTextBrowser()
         self.chat_display.setOpenExternalLinks(True)
         self.chat_display.setReadOnly(True)
         layout.addWidget(self.chat_display)
+
+        self.chat_tabs = QTabWidget()
+        self.chat_display.setOpenExternalLinks(True)
+        self.chat_display.setReadOnly(True)
+        layout.addWidget(self.chat_tabs)
 
         self.save_button = QPushButton("파일로 저장하기!")
         self.save_button.clicked.connect(self.save_to_file)
@@ -224,17 +230,31 @@ class ChatFetcherApp(QWidget):
 
     def handle_thread_finished(self, chats, error_message, video_id):
         if error_message:
-            self.chat_display.append(f"<b>🚨 [{video_id}] 오류:</b> {error_message}<br>")
+            content = f"<b>🚨 [{video_id}] 오류:</b> {error_message}<br>"
         elif chats:
             count = len(chats)
-            html_text = f"<b>✅ [영상 {video_id}] 채팅 내역 ({count}개)</b><br>" + "<br>".join(chats) + "<br><br>"
-            self.chat_display.append(html_text)
-            self.filtered_chats.extend(chats)
+            content = f"<b>✅ [영상 {video_id}] 채팅 내역 ({count}개)</b><br>" + "<br>".join(chats) + "<br><br>"
         else:
-            self.chat_display.append(f"<b>🚨 [영상 {video_id}] 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ</b><br><br>")
+            content = f"<b>🚨 [영상 {video_id}] 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ</b><br><br>"
 
+        # ✅ 탭 생성 및 채팅 출력
+        tab = QTextBrowser()
+        tab.setHtml(content)
+        tab.setOpenExternalLinks(True)
+
+        # 제목은 날짜 + 제목으로 구성
+        matching_vod = next((vod for vod in self.vod_data_list if str(vod["videoNo"]) == video_id), None)
+        if matching_vod:
+            tab_title = f'{matching_vod["publishDate"]} - {matching_vod["videoTitle"]}'
+        else:
+            tab_title = f'영상 {video_id}'
+
+        self.chat_tabs.addTab(tab, tab_title)
+
+        self.filtered_chats.extend(chats)
         self.current_thread_index += 1
         self.start_next_thread()
+
 
 
 
@@ -258,28 +278,49 @@ class ChatFetcherApp(QWidget):
         self.filtered_chats = chats
 
     def save_to_file(self):
-        if not hasattr(self, 'filtered_chats') or not self.filtered_chats:
-            self.chat_display.append("\n❌ 저장할 채팅 내역이 없네용")
+        if self.chat_tabs.count() == 0:
+            QMessageBox.information(self, "저장 실패", "❌ 저장할 채팅 탭이 없어요!")
             return
 
         file_name, _ = QFileDialog.getSaveFileName(self, "파일 저장", "chat_log.txt", "Text Files (*.txt);;All Files (*)")
         if file_name:
             with open(file_name, "w", encoding="utf-8") as file:
-                # 🔥 영상 URL 맨 위에 삽입
-                selected_videos = [cb for cb in self.vod_checkboxes if cb.isChecked()]
-                video_id = selected_videos[0].video_id if selected_videos else "unknown"
-                match = re.search(r'/video/(\d+)', video_id)
-                video_id = match.group(1) if match else video_id
-                file.write(f"https://chzzk.naver.com/video/{video_id}\n")
-                file.write(f"총 채팅 수: {len(self.filtered_chats)}개\n\n")  # ✅ 총 갯수 표시
+                total_chat_count = 0
 
-                # 🔥 하이퍼링크 제거해서 시간만 남기기
-                for line in self.filtered_chats:
-                    # 예시: <a href="https://...">00:00:33</a> - 닉네임: 메시지
-                    plain_line = re.sub(r'<a href="[^"]+">([^<]+)</a>', r'\1', line)
-                    file.write(plain_line + "\n")
+                for i in range(self.chat_tabs.count()):
+                    tab = self.chat_tabs.widget(i)
+                    title = self.chat_tabs.tabText(i)
+                    content = tab.toHtml()  # HTML로 가져와서 링크 파싱 가능
 
-            self.chat_display.append("\n✅ 채팅 내역이 저장되었어요!")
+                    # 🔥 하이퍼링크 제거: <a href="...">00:00:33</a> → 00:00:33
+                    plain_lines = []
+                    for line in content.split("<br>"):
+                        plain_line = re.sub(r'<a href="[^"]+">([^<]+)</a>', r'\1', line)
+                        plain_line = re.sub(r"<[^>]+>", "", plain_line)  # HTML 태그 제거
+                        plain_line = plain_line.strip()
+                        if plain_line:
+                            plain_lines.append(plain_line)
+
+                    # 🔥 video_id 추출용 (탭 제목에 포함된 정보 또는 저장된 리스트에서 탐색)
+                    matching_vod = self.vod_data_list[i] if i < len(self.vod_data_list) else None
+                    video_url = "https://chzzk.naver.com/"
+                    if matching_vod:
+                        video_id = matching_vod["videoId"]
+                        video_url = f"https://chzzk.naver.com/video/{video_id}"
+
+                    file.write(f"===== {title} =====\n")
+                    file.write(f"{video_url}\n")
+                    file.write(f"총 채팅 수: {len(plain_lines)}개\n\n")
+
+                    for line in plain_lines:
+                        file.write(line + "\n")
+
+                    file.write("\n\n")
+                    total_chat_count += len(plain_lines)
+
+            QMessageBox.information(self, "저장 완료", f"✅ 총 {total_chat_count}개의 채팅이 저장되었어요!")
+
+
 
     def load_vod_list(self):
         url = self.channel_url_input.text().strip()
