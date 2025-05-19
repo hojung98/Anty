@@ -99,13 +99,13 @@ class ChatFetcherApp(QWidget):
         self.setGeometry(100, 100, 500, 600)
 
         layout = QVBoxLayout()
-        self.id_label = QLabel("영상 ID를 입력하세요:")
+        self.id_label = QLabel("치지직 다시보기 URL을 입력해주세요!")
         layout.addWidget(self.id_label)
 
         self.video_id_input = QLineEdit()
         layout.addWidget(self.video_id_input)
 
-        self.label = QLabel("채팅을 수집할 닉네임을 입력하세요:")
+        self.label = QLabel("채팅을 수집할 닉네임을 입력해주세요!")
         layout.addWidget(self.label)
 
         self.nickname_input = QLineEdit()
@@ -120,7 +120,7 @@ class ChatFetcherApp(QWidget):
         self.chat_display.setReadOnly(True)
         layout.addWidget(self.chat_display)
 
-        self.save_button = QPushButton("파일로 저장")
+        self.save_button = QPushButton("파일로 저장하기")
         self.save_button.clicked.connect(self.save_to_file)
         layout.addWidget(self.save_button)
 
@@ -135,7 +135,7 @@ class ChatFetcherApp(QWidget):
         video_id = match.group(1) if match else raw_video_id
 
         if not video_id.isdigit() or not nickname:
-            self.chat_display.setText("❌ 영상 ID(또는 URL)와 닉네임을 모두 입력하세요.")
+            self.chat_display.setText("❌ 영상 URL과 닉네임을 모두 입력해주세요!")
             return
 
         self.chat_display.setText(f"🔍 영상 ID: {video_id} / 닉네임: '{nickname}'의 채팅 검색 중...\n")
@@ -161,13 +161,13 @@ class ChatFetcherApp(QWidget):
             html_text = f"<b>✅ '{self.nickname_input.text()}'의 전체 채팅 내역:</b><br>" + "<br>".join(chats)
             self.chat_display.setHtml(html_text)
         else:
-            self.chat_display.setText("\n🚨 해당 닉네임의 채팅 없음.")
+            self.chat_display.setText("\n🚨 해당 닉네임의 채팅을 찾을 수 없어요 ㅠ")
 
         self.filtered_chats = chats
 
     def save_to_file(self):
         if not hasattr(self, 'filtered_chats') or not self.filtered_chats:
-            self.chat_display.append("\n❌ 저장할 채팅 데이터가 없습니다.")
+            self.chat_display.append("\n❌ 저장할 채팅 데이터가 없네용")
             return
 
         file_name, _ = QFileDialog.getSaveFileName(self, "파일 저장", "chat_log.txt", "Text Files (*.txt);;All Files (*)")
@@ -177,7 +177,7 @@ class ChatFetcherApp(QWidget):
                 for line in self.filtered_chats:
                     plain_text = line.replace('<a href="', '').replace('">', ' ').replace('</a>', '')
                     file.write(plain_text + "\n")
-            self.chat_display.append("\n✅ 채팅 데이터가 저장되었습니다!")
+            self.chat_display.append("\n✅ 채팅 데이터가 저장되었어요!")
 
 
 if __name__ == "__main__":
