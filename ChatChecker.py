@@ -196,10 +196,18 @@ class ChatFetcherApp(QWidget):
         file_name, _ = QFileDialog.getSaveFileName(self, "파일 저장", "chat_log.txt", "Text Files (*.txt);;All Files (*)")
         if file_name:
             with open(file_name, "w", encoding="utf-8") as file:
-                # HTML 태그 제거 후 저장
+                # 🔥 영상 URL 맨 위에 삽입
+                video_id = self.video_id_input.text().strip()
+                match = re.search(r'/video/(\d+)', video_id)
+                video_id = match.group(1) if match else video_id
+                file.write(f"https://chzzk.naver.com/video/{video_id}\n")
+
+                # 🔥 하이퍼링크 제거해서 시간만 남기기
                 for line in self.filtered_chats:
-                    plain_text = line.replace('<a href="', '').replace('">', ' ').replace('</a>', '')
-                    file.write(plain_text + "\n")
+                    # 예시: <a href="https://...">00:00:33</a> - 닉네임: 메시지
+                    plain_line = re.sub(r'<a href="[^"]+">([^<]+)</a>', r'\1', line)
+                    file.write(plain_line + "\n")
+
             self.chat_display.append("\n✅ 채팅 데이터가 저장되었어요!")
 
 
