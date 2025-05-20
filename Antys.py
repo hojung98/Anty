@@ -120,6 +120,14 @@ class ChatFetcherApp(QWidget):
         main_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
 
+        nav_layout = QHBoxLayout()
+        self.prev_tab_btn = QPushButton("←")
+        self.next_tab_btn = QPushButton("→")
+        self.prev_tab_btn.clicked.connect(self.go_to_previous_tab)
+        self.next_tab_btn.clicked.connect(self.go_to_next_tab)
+        nav_layout.addWidget(self.prev_tab_btn)
+        nav_layout.addWidget(self.next_tab_btn)
+        left_layout.addLayout(nav_layout)
 
         self.id_label = QLabel("치지직 채널 홈 링크를 입력해주세요!")
         left_layout.addWidget(self.id_label)
@@ -128,7 +136,7 @@ class ChatFetcherApp(QWidget):
         self.channel_url_input.setPlaceholderText("닉네임, 채팅 중 원하시는 하나만 채우면 되셔요! 둘 다 채우셔도 되시구요!")
         left_layout.addWidget(self.channel_url_input)
 
-        self.load_vods_button = QPushButton("VOD 불러오기")
+        self.load_vods_button = QPushButton("다시보기 불러오기")
         self.load_vods_button.clicked.connect(self.load_vod_list)
         left_layout.addWidget(self.load_vods_button)
 
@@ -225,6 +233,9 @@ class ChatFetcherApp(QWidget):
 
         video_id, nickname, message = self.thread_queue[self.current_thread_index]
         thread = ChatFetcherThread(video_id, nickname, message)
+
+        thread.finished.connect(thread.deleteLater)
+
         thread.chat_fetched.connect(self.handle_thread_finished)
         thread.chat_progress.connect(self.append_chat)
 
@@ -233,13 +244,17 @@ class ChatFetcherApp(QWidget):
 
         matching_vod = next((vod for vod in self.vod_data_list if str(vod["videoNo"]) == video_id), None)
         if matching_vod:
-            tab_title = f'{matching_vod["publishDate"]} - {matching_vod["videoTitle"]}'
+            publish_date = matching_vod["publishDate"].split(" ")[0]
+            tab_title = f'{publish_date} - {matching_vod["videoTitle"]}'
         else:
             tab_title = f'영상 {video_id}'
 
         self.chat_tabs.addTab(self.live_tab, tab_title)
 
-        self.current_thread = thread
+        if not hasattr(self, "threads"):
+            self.threads = []  # 리스트 생성 (최초 1회)
+
+        self.threads.append(thread)
         thread.start()
 
 
@@ -273,7 +288,8 @@ class ChatFetcherApp(QWidget):
 
         matching_vod = next((vod for vod in self.vod_data_list if str(vod["videoNo"]) == video_id), None)
         if matching_vod:
-            tab_title = f'{matching_vod["publishDate"]} - {matching_vod["videoTitle"]}'
+            publish_date = matching_vod["publishDate"].split(" ")[0]
+            tab_title = f'{publish_date} - {matching_vod["videoTitle"]}'
         else:
             tab_title = f'영상 {video_id}'
 
@@ -348,18 +364,19 @@ class ChatFetcherApp(QWidget):
             QMessageBox.information(self, "저장 완료", f"총 {selected_vod_count}개의 다시보기 속 {total_chat_count}개의 채팅이 저장되었어요! 짝짝짝")
 
 
+    # ✅ 수정된 코드
     def closeEvent(self, event):
         try:
-            if hasattr(self, "current_thread") and self.current_thread.isRunning():
-                print("스레드 종료 시도 중...")
-                self.current_thread.stop()
-                self.current_thread.quit()
-                self.current_thread.wait()
-                print("스레드 정상 종료됨.")
+            for thread in getattr(self, "threads", []):
+                if thread.isRunning():
+                    print(f"[종료 시도] {thread.video_id}")
+                    thread.stop()
+                    thread.quit()
+                    thread.wait()
+                    print(f"[종료 완료] {thread.video_id}")
         except Exception as e:
             print(f"스레드 종료 중 오류 발생: {e}")
         event.accept()
-
 
 
     def load_vod_list(self):
@@ -429,6 +446,16 @@ class ChatFetcherApp(QWidget):
             for cb in self.vod_checkboxes:
                 cb.setChecked(False)
 
+    def go_to_previous_tab(self):
+        current_index = self.chat_tabs.currentIndex()
+        if current_index > 0:
+            self.chat_tabs.setCurrentIndex(current_index - 1)
+
+    def go_to_next_tab(self):
+        current_index = self.chat_tabs.currentIndex()
+        if current_index < self.chat_tabs.count() - 1:
+            self.chat_tabs.setCurrentIndex(current_index + 1)
+            
 
 class ClosableTabWidget(QTabWidget):
     def __init__(self):
