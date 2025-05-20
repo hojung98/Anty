@@ -1,4 +1,5 @@
-![image](https://github.com/user-attachments/assets/4be4698f-6817-4eeb-90ff-5ad8386c35cd)
+![image](https://github.com/user-attachments/assets/a851889c-d7f6-4e10-b0e6-cb5d102604e7)
+
 
 
 1. 다시보기가 남아있다면 채널 내 모든 채팅을 검색 가능 검색된 채팅은 부드럽게 올라와여
