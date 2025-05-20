@@ -102,7 +102,7 @@ class ChatFetcherThread(QThread):
         minutes = (total_seconds % 3600) // 60
         seconds = total_seconds % 60
         time_str = f"{hours:02}:{minutes:02}:{seconds:02}"
-        video_url = f"https://chzzk.naver.com/video/{self.video_id}?t={total_seconds}"
+        video_url = f"https://chzzk.naver.com/video/{self.video_id}?currentTime={total_seconds}"
         return f'<a href="{video_url}">{time_str}</a>'
 
 
