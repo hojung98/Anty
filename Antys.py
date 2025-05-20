@@ -243,7 +243,7 @@ class ChatFetcherApp(QWidget):
         self.chat_tabs.addTab(self.live_tab, tab_title)
 
         if not hasattr(self, "threads"):
-            self.threads = []  # 리스트 생성 (최초 1회)
+            self.threads = []
 
         self.threads.append(thread)
         thread.start()
@@ -454,14 +454,12 @@ class ClosableTabWidget(QWidget):
 
         self.tab_widget = QTabWidget()
 
-        # ▶︎ 탭 닫기 버튼 활성화
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.tab_widget.removeTab)
 
         self.tab_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tab_widget.customContextMenuRequested.connect(self.show_tab_context_menu)
 
-        # ▶︎ ← / → 버튼 생성 및 연결
         self.prev_button = QPushButton("←")
         self.next_button = QPushButton("→")
         self.prev_button.setFixedWidth(30)
@@ -489,7 +487,6 @@ class ClosableTabWidget(QWidget):
 
     # proxy methods
     def addTab(self, widget, title):
-        # 더미 탭이 아직 있다면 제거
         if hasattr(self, "_dummy_tab_index") and self._dummy_tab_index is not None:
             self.tab_widget.removeTab(self._dummy_tab_index)
             self._dummy_tab_index = None
@@ -540,8 +537,8 @@ class ClosableTabWidget(QWidget):
             return
 
         menu = QMenu(self)
-        save_action = QAction("저장", self)
-        close_action = QAction("닫기", self)
+        save_action = QAction("이 탭만 저장하기", self)
+        close_action = QAction("이 탭만 지우기", self)
 
         close_action.triggered.connect(lambda: self.removeTab(index))
         save_action.triggered.connect(lambda: self.save_single_tab(index))
@@ -558,11 +555,9 @@ class ClosableTabWidget(QWidget):
         lines = plain_text.splitlines()
         chat_lines = [line.strip() for line in lines if line.strip() and not line.startswith("🚨")]
 
-        # 기본값
         video_url = "https://chzzk.naver.com/"
         video_id = None
 
-        # 부모 위젯에서 vod_data_list 접근
         main_window = self.parentWidget().parentWidget()
         matching_vod = None
         if hasattr(main_window, "vod_data_list"):
@@ -576,14 +571,13 @@ class ClosableTabWidget(QWidget):
             video_id = matching_vod["videoId"]
             video_url = f"https://chzzk.naver.com/video/{video_id}"
         else:
-            # fallback: 채팅 내 링크에서 추출
             for line in chat_lines:
                 match = re.search(r'<a href="([^"]+)">', line)
                 if match:
                     video_url = match.group(1)
                     break
 
-        file_name, _ = QFileDialog.getSaveFileName(self, "이 탭만 저장", f"{title}.txt", "Text Files (*.txt);;All Files (*)")
+        file_name, _ = QFileDialog.getSaveFileName(self, "선택된 탭만 저장하는 중!", f"{title}.txt", "Text Files (*.txt);;All Files (*)")
         if file_name:
             with open(file_name, "w", encoding="utf-8") as file:
                 file.write(f"===== {title} =====\n")
