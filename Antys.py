@@ -330,16 +330,16 @@ class ChatFetcherApp(QWidget):
                 for i in range(self.chat_tabs.count()):
                     tab = self.chat_tabs.widget(i)
                     title = self.chat_tabs.tabText(i)
+                    url_text = tab.toHtml().strip()
                     plain_text = tab.toPlainText().strip()
 
                     lines = plain_text.splitlines()
                     chat_lines = [line.strip() for line in lines if line.strip() and not line.startswith("🚨")]
 
-                    matching_vod = self.vod_data_list[i] if i < len(self.vod_data_list) else None
                     video_url = "https://chzzk.naver.com/"
-                    if matching_vod:
-                        video_id = matching_vod["videoId"]
-                        video_url = f"https://chzzk.naver.com/video/{video_id}"
+                    match = re.search(r'<a href="(https://chzzk\.naver\.com/video/\d+)', url_text)
+                    if match:
+                        video_url = match.group(1)
 
                     file.write(f"===== {title} =====\n")
                     file.write(f"{video_url}\n")
@@ -355,7 +355,7 @@ class ChatFetcherApp(QWidget):
             QMessageBox.information(self, "저장 완료", f"총 {selected_vod_count}개의 다시보기 속 {total_chat_count}개의 채팅이 저장되었어요! 짝짝짝")
 
 
-    # ✅ 수정된 코드
+
     def closeEvent(self, event):
         try:
             for thread in getattr(self, "threads", []):
@@ -550,32 +550,23 @@ class ClosableTabWidget(QWidget):
     def save_single_tab(self, index):
         tab = self.tab_widget.widget(index)
         title = self.tab_widget.tabText(index)
+        url_text = tab.toHtml().strip()
         plain_text = tab.toPlainText().strip()
+
 
         lines = plain_text.splitlines()
         chat_lines = [line.strip() for line in lines if line.strip() and not line.startswith("🚨")]
 
+
         video_url = "https://chzzk.naver.com/"
-        video_id = None
+        match = re.search(r'<a href="(https://chzzk\.naver\.com/video/\d+)', url_text)
 
-        main_window = self.parentWidget().parentWidget()
-        matching_vod = None
-        if hasattr(main_window, "vod_data_list"):
-            for vod in main_window.vod_data_list:
-                vod_title = f'{vod["publishDate"].split(" ")[0]} - {vod["videoTitle"]}'
-                if vod_title == title:
-                    matching_vod = vod
-                    break
 
-        if matching_vod:
-            video_id = matching_vod["videoId"]
-            video_url = f"https://chzzk.naver.com/video/{video_id}"
+        if match:
+            video_url = match.group(1)            
         else:
-            for line in chat_lines:
-                match = re.search(r'<a href="([^"]+)">', line)
-                if match:
-                    video_url = match.group(1)
-                    break
+            print("")
+
 
         file_name, _ = QFileDialog.getSaveFileName(self, "선택된 탭만 저장하는 중!", f"{title}.txt", "Text Files (*.txt);;All Files (*)")
         if file_name:
@@ -589,7 +580,6 @@ class ClosableTabWidget(QWidget):
                     file.write(line + "\n")
 
             QMessageBox.information(self, "저장 완료!", f"'{title}'의 채팅 내역이 저장되었어요!")
-
 
 
 if __name__ == "__main__":
