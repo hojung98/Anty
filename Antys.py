@@ -3,7 +3,7 @@ import json
 import sys
 import re
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QTextBrowser, QFileDialog, QScrollArea, QCheckBox, QMessageBox, QHBoxLayout, QTextEdit, QTabWidget, QMenu
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Signal, Qt
 from functools import partial
 from PySide6.QtGui import QAction, QIcon
 
@@ -167,8 +167,8 @@ class ChatFetcherApp(QWidget):
 
 
         self.chat_tabs = ClosableTabWidget()
+        self.chat_tabs.tab_widget.tabBar().setUsesScrollButtons(False)
         self.chat_tabs.setMinimumWidth(400)
-        self.chat_tabs.setTabsClosable(False)
 
         self.chat_tabs.setTabsClosable(True)
         self.chat_tabs.tab_widget.tabCloseRequested.connect(self.chat_tabs.removeTab)
@@ -452,12 +452,15 @@ class ClosableTabWidget(QWidget):
     def __init__(self):
         super().__init__()
 
-        # 내부 구성 요소
         self.tab_widget = QTabWidget()
-        self.tab_bar = self.tab_widget.tabBar()
-        self.tab_bar.setUsesScrollButtons(False)
 
-        # 좌우 이동 버튼
+        # ▶︎ 탭 닫기 버튼 활성화
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.tabCloseRequested.connect(self.tab_widget.removeTab)
+
+
+
+        # ▶︎ ← / → 버튼 생성 및 연결
         self.prev_button = QPushButton("←")
         self.next_button = QPushButton("→")
         self.prev_button.setFixedWidth(30)
@@ -466,30 +469,30 @@ class ClosableTabWidget(QWidget):
         self.prev_button.clicked.connect(self.go_to_prev_tab)
         self.next_button.clicked.connect(self.go_to_next_tab)
 
-        # 탭바 + 버튼을 감싸는 상단 레이아웃
-        top_bar_layout = QHBoxLayout()
-        top_bar_layout.setContentsMargins(0, 0, 0, 0)
-        top_bar_layout.addWidget(self.tab_bar)
-        top_bar_layout.addStretch()
-        top_bar_layout.addWidget(self.prev_button)
-        top_bar_layout.addWidget(self.next_button)
+        corner_widget = QWidget()
+        corner_layout = QHBoxLayout()
+        corner_layout.setContentsMargins(0, 0, 0, 0)
+        corner_layout.setSpacing(0)
+        corner_layout.addWidget(self.prev_button)
+        corner_layout.addWidget(self.next_button)
+        corner_widget.setLayout(corner_layout)
 
-        top_bar_widget = QWidget()
-        top_bar_widget.setLayout(top_bar_layout)
+        self.tab_widget.setCornerWidget(corner_widget, Qt.TopRightCorner)
+        self._dummy_tab_index = self.tab_widget.addTab(QWidget(), " ")
 
-        # 전체 구성
+
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(top_bar_widget)
         layout.addWidget(self.tab_widget)
         self.setLayout(layout)
 
-        # 탭 닫기 연결
-        self.tab_widget.setTabsClosable(True)
-        self.tab_widget.tabCloseRequested.connect(self.tab_widget.removeTab)
-
     # proxy methods
     def addTab(self, widget, title):
+        # 더미 탭이 아직 있다면 제거
+        if hasattr(self, "_dummy_tab_index") and self._dummy_tab_index is not None:
+            self.tab_widget.removeTab(self._dummy_tab_index)
+            self._dummy_tab_index = None
+
         self.tab_widget.addTab(widget, title)
 
     def removeTab(self, index):
