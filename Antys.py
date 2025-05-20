@@ -120,15 +120,6 @@ class ChatFetcherApp(QWidget):
         main_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
 
-        nav_layout = QHBoxLayout()
-        self.prev_tab_btn = QPushButton("←")
-        self.next_tab_btn = QPushButton("→")
-        self.prev_tab_btn.clicked.connect(self.go_to_previous_tab)
-        self.next_tab_btn.clicked.connect(self.go_to_next_tab)
-        nav_layout.addWidget(self.prev_tab_btn)
-        nav_layout.addWidget(self.next_tab_btn)
-        left_layout.addLayout(nav_layout)
-
         self.id_label = QLabel("치지직 채널 홈 링크를 입력해주세요!")
         left_layout.addWidget(self.id_label)
 
@@ -175,12 +166,12 @@ class ChatFetcherApp(QWidget):
         left_layout.addWidget(self.save_button)
 
 
-        self.chat_tabs = QTabWidget()
+        self.chat_tabs = ClosableTabWidget()
         self.chat_tabs.setMinimumWidth(400)
         self.chat_tabs.setTabsClosable(False)
 
         self.chat_tabs.setTabsClosable(True)
-        self.chat_tabs.tabCloseRequested.connect(self.chat_tabs.removeTab)
+        self.chat_tabs.tab_widget.tabCloseRequested.connect(self.chat_tabs.removeTab)
 
 
         self.chat_tabs.setStyleSheet("""
@@ -455,24 +446,90 @@ class ChatFetcherApp(QWidget):
         current_index = self.chat_tabs.currentIndex()
         if current_index < self.chat_tabs.count() - 1:
             self.chat_tabs.setCurrentIndex(current_index + 1)
-            
 
-class ClosableTabWidget(QTabWidget):
+
+class ClosableTabWidget(QWidget):
     def __init__(self):
         super().__init__()
-        self.customContextMenuRequested.connect(self.show_context_menu)
-        self.setTabsClosable(False)
 
-    def show_context_menu(self, pos):
-        index = self.tabBar().tabAt(pos)
-        if index == -1:
-            return
+        # 내부 구성 요소
+        self.tab_widget = QTabWidget()
+        self.tab_bar = self.tab_widget.tabBar()
+        self.tab_bar.setUsesScrollButtons(False)
 
-        menu = QMenu(self)
-        close_action = QAction("이 탭 닫기", self)
-        close_action.triggered.connect(lambda: self.removeTab(index))
-        menu.addAction(close_action)
-        menu.exec(self.mapToGlobal(pos))
+        # 좌우 이동 버튼
+        self.prev_button = QPushButton("←")
+        self.next_button = QPushButton("→")
+        self.prev_button.setFixedWidth(30)
+        self.next_button.setFixedWidth(30)
+
+        self.prev_button.clicked.connect(self.go_to_prev_tab)
+        self.next_button.clicked.connect(self.go_to_next_tab)
+
+        # 탭바 + 버튼을 감싸는 상단 레이아웃
+        top_bar_layout = QHBoxLayout()
+        top_bar_layout.setContentsMargins(0, 0, 0, 0)
+        top_bar_layout.addWidget(self.tab_bar)
+        top_bar_layout.addStretch()
+        top_bar_layout.addWidget(self.prev_button)
+        top_bar_layout.addWidget(self.next_button)
+
+        top_bar_widget = QWidget()
+        top_bar_widget.setLayout(top_bar_layout)
+
+        # 전체 구성
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(top_bar_widget)
+        layout.addWidget(self.tab_widget)
+        self.setLayout(layout)
+
+        # 탭 닫기 연결
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.tabCloseRequested.connect(self.tab_widget.removeTab)
+
+    # proxy methods
+    def addTab(self, widget, title):
+        self.tab_widget.addTab(widget, title)
+
+    def removeTab(self, index):
+        self.tab_widget.removeTab(index)
+
+    def setCurrentIndex(self, index):
+        self.tab_widget.setCurrentIndex(index)
+
+    def currentIndex(self):
+        return self.tab_widget.currentIndex()
+
+    def count(self):
+        return self.tab_widget.count()
+
+    def widget(self, index):
+        return self.tab_widget.widget(index)
+
+    def tabText(self, index):
+        return self.tab_widget.tabText(index)
+
+    def setTabText(self, index, text):
+        self.tab_widget.setTabText(index, text)
+
+    def indexOf(self, widget):
+        return self.tab_widget.indexOf(widget)
+
+    # ← / → 기능
+    def go_to_prev_tab(self):
+        index = self.tab_widget.currentIndex()
+        if index > 0:
+            self.tab_widget.setCurrentIndex(index - 1)
+
+    def go_to_next_tab(self):
+        index = self.tab_widget.currentIndex()
+        if index < self.tab_widget.count() - 1:
+            self.tab_widget.setCurrentIndex(index + 1)
+
+    def setTabsClosable(self, closable: bool):
+        self.tab_widget.setTabsClosable(closable)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
