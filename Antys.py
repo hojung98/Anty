@@ -458,7 +458,8 @@ class ClosableTabWidget(QWidget):
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.tab_widget.removeTab)
 
-
+        self.tab_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tab_widget.customContextMenuRequested.connect(self.show_tab_context_menu)
 
         # ▶︎ ← / → 버튼 생성 및 연결
         self.prev_button = QPushButton("←")
@@ -532,6 +533,69 @@ class ClosableTabWidget(QWidget):
 
     def setTabsClosable(self, closable: bool):
         self.tab_widget.setTabsClosable(closable)
+
+    def show_tab_context_menu(self, pos):
+        index = self.tab_widget.tabBar().tabAt(pos)
+        if index == -1:
+            return
+
+        menu = QMenu(self)
+        save_action = QAction("저장", self)
+        close_action = QAction("닫기", self)
+
+        close_action.triggered.connect(lambda: self.removeTab(index))
+        save_action.triggered.connect(lambda: self.save_single_tab(index))
+
+        menu.addAction(save_action)
+        menu.addAction(close_action)        
+        menu.exec(self.tab_widget.mapToGlobal(pos))
+
+    def save_single_tab(self, index):
+        tab = self.tab_widget.widget(index)
+        title = self.tab_widget.tabText(index)
+        plain_text = tab.toPlainText().strip()
+
+        lines = plain_text.splitlines()
+        chat_lines = [line.strip() for line in lines if line.strip() and not line.startswith("🚨")]
+
+        # 기본값
+        video_url = "https://chzzk.naver.com/"
+        video_id = None
+
+        # 부모 위젯에서 vod_data_list 접근
+        main_window = self.parentWidget().parentWidget()
+        matching_vod = None
+        if hasattr(main_window, "vod_data_list"):
+            for vod in main_window.vod_data_list:
+                vod_title = f'{vod["publishDate"].split(" ")[0]} - {vod["videoTitle"]}'
+                if vod_title == title:
+                    matching_vod = vod
+                    break
+
+        if matching_vod:
+            video_id = matching_vod["videoId"]
+            video_url = f"https://chzzk.naver.com/video/{video_id}"
+        else:
+            # fallback: 채팅 내 링크에서 추출
+            for line in chat_lines:
+                match = re.search(r'<a href="([^"]+)">', line)
+                if match:
+                    video_url = match.group(1)
+                    break
+
+        file_name, _ = QFileDialog.getSaveFileName(self, "이 탭만 저장", f"{title}.txt", "Text Files (*.txt);;All Files (*)")
+        if file_name:
+            with open(file_name, "w", encoding="utf-8") as file:
+                file.write(f"===== {title} =====\n")
+                file.write(f"{video_url}\n")
+                file.write(f"총 채팅 수: {len(chat_lines)}개\n\n")
+
+                for line in chat_lines:
+                    line = re.sub(r'<a href="[^"]+">([^<]+)</a>', r'\1', line)
+                    file.write(line + "\n")
+
+            QMessageBox.information(self, "저장 완료!", f"'{title}'의 채팅 내역이 저장되었어요!")
+
 
 
 if __name__ == "__main__":
