@@ -37,4 +37,15 @@
 
 넘 많은 데이터를 자주 가져오면 멈출 수도 있어요 이 경우 서버 쪽에서 막았을 가능성이 있어여!
 
+
+궁금하신 점이 있으시다면 https://www.youtube.com/post/UgkxrYnLucMmwycA3ZdGv1WrLUcIV4gszJt3 여기에 댓글 남겨주세요!
+
+
+다운로드 하는 방법은 파일 이름 클릭하고 오른쪽에 보면 내려받는 표시가 보이실꺼에요!
+
+![image](https://github.com/user-attachments/assets/a317b2c2-e5c2-4c9e-a3b6-4a6bb858ac98)
+
+이거에요!
+
+
 소스 코드 가져다 쓰셔도 되는데 출처 남겨주시구..ㅠㅠ 감사하단 인사를 해주셨음 좋겠어요! 좋은 하루 되셔요!
